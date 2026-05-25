@@ -24,7 +24,15 @@ class HuggingfaceRecogn(BaseRecogn):
         self.audio_duration=len(AudioSegment.from_wav(self.audio_file))
 
     def _download(self):
-        tools.check_and_down_hf(self.model_name,self.model_name,self.local_dir,callback=self._process_callback)
+        from videotrans import recognition
+        from videotrans.recognition.model_assets import ensure_assets
+
+        ensure_assets(
+            recognition.HUGGINGFACE_ASR,
+            self.model_name,
+            detect_language=self.detect_language,
+            callback=self._process_callback,
+        )
 
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit(): return

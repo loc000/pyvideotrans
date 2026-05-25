@@ -836,7 +836,9 @@ VideoTransError (基类)
     │   ├── onlyone_set_role.py      # 单视频模式：说话人角色分配对话框
     │   ├── onlyone_set_editdubb.py  # 单视频模式：配音结果编辑对话框
     │   ├── clip_video.py       # 视频裁剪组件
+    │   ├── realtime_engine.py  # 实时 ASR 引擎（sherpa-onnx Worker、模型下载）
     │   ├── realtime_stt.py     # 实时语音识别窗口
+    │   ├── live_captions.py    # 实时字幕（麦克风/系统声音；ASR=sherpa流式或recognition分块；翻译渠道可配）
     │   ├── textmatching.py     # 文本比对窗口
     │   ├── set_proxy.py        # 代理设置弹窗
     │   ├── set_ass.py          # ASS 字幕样式设置
@@ -993,6 +995,71 @@ _ID_NAME_DICT[MYTRANSLATOR_INDEX] = ChannelProvider(
 - 通过 `get_class(channel_id, "recognition/translator/tts", _ID_NAME_DICT)` 懒加载
 - API key 校验依赖 `is_input_api()` 函数 + `_ID_NAME_DICT` 中的 `key_name` / `win` 字段
 - 翻译/配音引擎内部并发数由 `settings` 中的对应字段控制
+
+---
+
+## 十五、实时字幕（Live Captions）与实时识别引擎
+
+### 15.1 双窗口与共享 UI
+
+| 窗口 | 文件 | 引擎 |
+|------|------|------|
+| 实时字幕 | `videotrans/component/live_captions.py` | Sherpa 流式（`Worker`）或分块 ASR（`ChunkedRecognWorker`） |
+| 实时转写 | `videotrans/component/realtime_stt.py` | Sherpa 流式（`Worker`） |
+
+`videotrans/component/realtime_ui_base.py` 提供 Sherpa 模型下载、进度展示、worker 停止、录音目录打开等共用逻辑。
+
+### 15.2 分块识别流水线（非 Sherpa 渠道）
+
+```mermaid
+flowchart TB
+    capture[CaptureThread ChunkedRecognWorker.run]
+    queue[ChunkQueue maxsize=1]
+    recognize[RecognizeThread _ChunkRecognizeThread]
+    ui[LiveCaptionsWindow]
+    capture -->|float32 缓冲| queue
+    queue --> recognize
+    recognize -->|new_segment| ui
+```
+
+- **采集线程**：仅 `read()`、拼接缓冲、入队；不阻塞在 ASR 上。
+- **识别线程**：出队后内存重采样到 16 kHz，再调用渠道 transcribe。
+- **背压**：队列满时丢弃最旧待处理块（DEBUG 记录丢弃计数）。
+
+### 15.3 模型资产与执行模式
+
+`videotrans/recognition/model_assets.py` 统一：
+
+| API | 职责 |
+|-----|------|
+| `local_dir_for` | 本地模型目录 |
+| `resolve_assets` / `ensure_assets` | 下载策略（Qwen：中文 ModelScope，其它 HuggingFace；FunASR 别名与 `_funasr` 一致） |
+| `execution_mode(live=True)` | 直播：`QWENASR` / Faster-Whisper → `inline`；API → `api`；FunASR → `subprocess` |
+
+批量任务仍走 `recognition.run()` + `GlobalProcessManager`（进程隔离）。
+
+### 15.4 直播内联会话
+
+`videotrans/recognition/live_model_session.py`：`LiveModelSession` 在会话内保持一份模型实例（Qwen、Faster-Whisper）。Qwen 加载逻辑与 `videotrans/recognition/qwen_asr_load.py` 共用，供 `stt_fun.qwen3asr_fun` 与直播共用。
+
+直播 `uuid` 以 `live_captions_` 为前缀时，`BaseRecogn.cut_audio()` 跳过 VAD，整段转写滚动块。
+
+### 15.5 内存参考（直播，单会话）
+
+| 渠道 | 粗略 RAM |
+|------|----------|
+| Qwen3-ASR 1.7B CPU | ~4–6 GB |
+| Qwen3-ASR 1.7B CUDA | ~3 GB VRAM + 主机内存 |
+| Faster-Whisper tiny/small | ~1–2 GB |
+| Faster-Whisper large | ~4–8 GB |
+| FunASR（子进程/块） | 视模型，建议 ≥8 GB |
+
+### 15.6 成功标准
+
+1. 连续说话 60 s：采集不因推理阻塞而丢音。
+2. Qwen / Faster-Whisper 直播：每会话仅加载模型一次。
+3. 批量 prefetch、`_download`、直播启动使用相同 `ensure_assets` 规则。
+4. `realtime_stt` 与 live captions 共用 `CheckAudioDevices` + `CaptureDevice`。
 
 ---
 

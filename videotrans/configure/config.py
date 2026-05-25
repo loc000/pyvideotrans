@@ -66,25 +66,65 @@ def _set_env():
     os.environ['PATH'] = ROOT_DIR + os.pathsep + f'{ROOT_DIR}/ffmpeg' + os.pathsep + f'{ROOT_DIR}/ffmpeg/sox' + os.pathsep + os.environ.get(
         "PATH", "")
 
+def _console_log_level():
+    name = os.environ.get('VIDEOTRANS_CONSOLE_LOG_LEVEL', 'WARNING').upper()
+    return getattr(logging, name, logging.WARNING)
+
+
+def _suppress_third_party_console_noise():
+    """Keep HF/ModelScope/transformers chatter off the terminal unless --verbose."""
+    os.environ.setdefault('TRANSFORMERS_VERBOSITY', 'error')
+    os.environ.setdefault('HF_HUB_DISABLE_PROGRESS_BARS', '1')
+    os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+    import warnings
+    warnings.filterwarnings('ignore', category=UserWarning, module='ctranslate2')
+    warnings.filterwarnings('ignore', message='.*generation flags.*')
+    warnings.filterwarnings('ignore', message='.*pkg_resources.*')
+    for _name in ('modelscope', 'huggingface_hub', 'transformers', 'httpx', 'filelock', 'urllib3'):
+        logging.getLogger(_name).setLevel(logging.ERROR)
+
+
 def _set_logs():
-    # 日志初始化
+    # 日志初始化：文件 DEBUG；控制台默认 WARNING，可用 VIDEOTRANS_CONSOLE_LOG_LEVEL 或 sp.py -v
     logger = logging.getLogger('VideoTrans')
     logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('[%(levelname)s] %(message)s')
-    _file_handler = logging.FileHandler(f'{ROOT_DIR}/logs/{datetime.datetime.now().strftime("%Y%m%d")}.log',
-                                        encoding='utf-8')
+    if logger.handlers:
+        return logger
+
+    _file_fmt = logging.Formatter('[%(levelname)s] %(message)s')
+    _file_handler = logging.FileHandler(
+        f'{ROOT_DIR}/logs/{datetime.datetime.now().strftime("%Y%m%d")}.log',
+        encoding='utf-8',
+    )
     _file_handler.setLevel(logging.DEBUG)
-    _file_handler.setFormatter(formatter)
+    _file_handler.setFormatter(_file_fmt)
+
+    _console_level = _console_log_level()
+    if _console_level <= logging.DEBUG:
+        _console_fmt = logging.Formatter(
+            '[%(levelname)s] %(filename)s:%(lineno)d %(message)s'
+        )
+    else:
+        _console_fmt = logging.Formatter('[%(levelname)s] %(message)s')
     _console_handler = logging.StreamHandler(sys.stdout)
-    _console_handler.setLevel(logging.WARNING)
-    _console_handler.setFormatter(formatter)
+    _console_handler.setLevel(_console_level)
+    _console_handler.setFormatter(_console_fmt)
+
     logger.addHandler(_file_handler)
     logger.addHandler(_console_handler)
 
-    logging.getLogger("transformers").setLevel(logging.DEBUG)
-    logging.getLogger("filelock").setLevel(logging.DEBUG)
-    logging.getLogger("faster_whisper").setLevel(logging.DEBUG)
+    if _console_level <= logging.DEBUG:
+        logging.captureWarnings(True)
+        for _name in ('transformers', 'filelock', 'faster_whisper', 'modelscope', 'huggingface_hub'):
+            logging.getLogger(_name).setLevel(logging.DEBUG)
+    else:
+        _suppress_third_party_console_noise()
     return logger
+
+
+# Quiet HF/ModelScope on import unless user enabled --verbose
+if _console_log_level() > logging.DEBUG:
+    _suppress_third_party_console_noise()
 
 
 
@@ -779,6 +819,20 @@ class AppParams:
             "trans_source_language": 0,
             "trans_target_language": 1,
             "trans_out_format": 0,
+            "live_caption_translate_type": 0,
+            "live_caption_source_language": 0,
+            "live_caption_target_language": 1,
+            "live_caption_show_translate": False,
+            "live_caption_bilingual": True,
+            "live_caption_font_size": 28,
+            "live_caption_opacity": 0.75,
+            "live_caption_trans_merge_sec": 0,
+            "live_caption_audio_source": "mic",
+            "live_caption_recogn_type": -1,
+            "live_caption_model_name": "large-v3-turbo",
+            "live_caption_recogn_language": 0,
+            "live_caption_cuda": False,
+            "live_caption_chunk_sec": 4,
             "dubb_source_language": 0,
             "dubb_tts_type": 0,
             "dubb_role": 0,
@@ -846,12 +900,15 @@ def push_queue(uuid:str, msg:SignMsg):
 
 
 def update_logging_level(new_level_str):
-    """动态修改日志等级"""
+    """动态修改控制台日志等级（文件日志保持 DEBUG）。"""
     new_level = getattr(logging, new_level_str.upper(), logging.INFO)
+    os.environ['VIDEOTRANS_CONSOLE_LOG_LEVEL'] = new_level_str.upper()
     _logger = logging.getLogger('VideoTrans')
-    _logger.setLevel(new_level)
+    _logger.setLevel(logging.DEBUG)
     for handler in _logger.handlers:
-        if isinstance(handler, (logging.StreamHandler, logging.FileHandler)):
+        if isinstance(handler, logging.FileHandler):
+            handler.setLevel(logging.DEBUG)
+        elif isinstance(handler, logging.StreamHandler) and getattr(handler, 'stream', None) is sys.stdout:
             handler.setLevel(new_level)
 
 _set_env()

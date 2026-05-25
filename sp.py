@@ -24,6 +24,28 @@ AI嘲: 码之烂平生仅见
 
 import os
 import atexit, sys, time
+
+
+def _bootstrap_log_env():
+    """Apply console log level before videotrans (and logging) is imported."""
+    import argparse
+
+    _p = argparse.ArgumentParser(add_help=False)
+    _p.add_argument("-v", "--verbose", action="store_true")
+    _p.add_argument(
+        "--log-level",
+        dest="log_level",
+        default=None,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "debug", "info", "warning", "error"],
+    )
+    _args, _ = _p.parse_known_args(sys.argv[1:])
+    if _args.verbose:
+        os.environ["VIDEOTRANS_CONSOLE_LOG_LEVEL"] = "DEBUG"
+    elif _args.log_level:
+        os.environ["VIDEOTRANS_CONSOLE_LOG_LEVEL"] = _args.log_level.upper()
+
+
+_bootstrap_log_env()
 from PySide6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt, qInstallMessageHandler, QTimer
 from PySide6.QtGui import QPixmap, QGuiApplication, QIcon
@@ -134,9 +156,27 @@ def initialize_full_app(start_window, app_instance):
     # 命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument('--lang', type=str, help='Set the application language (e.g., en, zh)')
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Print DEBUG/trace logs to the console (same as --log-level DEBUG)',
+    )
+    parser.add_argument(
+        '--log-level',
+        dest='log_level',
+        default=None,
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+        help='Console log level (file log stays DEBUG). Example: --log-level DEBUG',
+    )
     cli_args, unknown = parser.parse_known_args()
     if cli_args.lang:
         os.environ['PYVIDEOTRANS_LANG'] = cli_args.lang.lower()
+    if cli_args.verbose:
+        os.environ["VIDEOTRANS_CONSOLE_LOG_LEVEL"] = "DEBUG"
+    elif cli_args.log_level:
+        os.environ["VIDEOTRANS_CONSOLE_LOG_LEVEL"] = cli_args.log_level
+    from videotrans.configure.config import update_logging_level
+    update_logging_level(os.environ.get("VIDEOTRANS_CONSOLE_LOG_LEVEL", "WARNING"))
 
     # 导入qss image 资源
     import videotrans.ui.dark.darkstyle_rc

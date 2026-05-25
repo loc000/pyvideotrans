@@ -236,8 +236,10 @@ class BaseCon:
             )
             # return Tuple[bool or result , None or error]
             data,err = future.result()
-            if err or not data:
+            if err:
                 raise VideoTransError(err)
+            if data is False:
+                raise VideoTransError(err or f"{title} failed")
             self.signal(text=f'[{title}] end: {int(time.time() - _st)}s')
             return data
         except BrokenProcessPool as e:
@@ -249,6 +251,8 @@ class BaseCon:
                 _cuda = f" GPU{device_index}"
             logger.exception(f'{title}: {_model}{_cuda}, {kwargs=},{e}', exc_info=True)
             raise VideoTransError(f'{_model}{_cuda} {e}')
+        except VideoTransError:
+            raise
         except Exception as e:
             logger.exception(f'{title},{e}', exc_info=True)
             raise

@@ -517,41 +517,50 @@ def qwen3asr_fun(
         is_cuda=False,
         audio_file=None,
         model_name="1.7B",
+        detect_language=None,
         device_index=0  # gpu索引
 ) -> Tuple[Union[List[SrtItem], bool], Union[str, None]]:
-    import torch
-    from qwen_asr import Qwen3ASRModel
-    if is_cuda:
-        device_map = f'cuda:{device_index}'
-        dtype = torch.float16
-    else:
-        device_map = 'cpu'
-        dtype = torch.float32
+    from videotrans.configure.config import _suppress_third_party_console_noise
+    from videotrans.recognition.qwen_asr_load import load_qwen_asr, transcribe_files
+    from videotrans.recognition.qwen_asr_lang import qwen_asr_language_name
 
+    _suppress_third_party_console_noise()
     try:
-        _write_log(logs_file, json.dumps({"type": "logs", "text": f'Load Qwen3ASR on {device_map}'}))
-        model = Qwen3ASRModel.from_pretrained(
-            f"{ROOT_DIR}/models/models--Qwen--Qwen3-ASR-{model_name}",
-            dtype=dtype,
-            device_map=device_map,
-            attn_implementation=None,
-            max_inference_batch_size=8,
-            # Batch size limit for inference. -1 means unlimited. Smaller values can help avoid OOM.
-            max_new_tokens=2048,  # Maximum number of tokens to generate. Set a larger value for long audio input.
+        _write_log(
+            logs_file,
+            json.dumps({"type": "logs", "text": f"Load Qwen3ASR cuda={is_cuda}"}),
         )
-        srts: List[SrtItem] = [SrtItem(**item) for item in json.loads(Path(cut_audio_list).read_text(encoding='utf-8'))]
-
-        srts_chunk = [srts[i:i + 8] for i in range(0, len(srts), 8)]
-        for i, it_list in enumerate(srts_chunk):
-            results = model.transcribe(
-                audio=[it['filename'] for it in it_list],
-                language=[None for it in it_list],  # can also be set to None for automatic language detection
-                return_time_stamps=False,
+        model = load_qwen_asr(
+            model_name, is_cuda=is_cuda, device_index=device_index
+        )
+        srts: List[SrtItem] = [
+            SrtItem(**item)
+            for item in json.loads(
+                Path(cut_audio_list).read_text(encoding="utf-8")
             )
+        ]
+        _qwen_lang = qwen_asr_language_name(detect_language)
+        srts_chunk = [srts[i : i + 8] for i in range(0, len(srts), 8)]
+        for i, it_list in enumerate(srts_chunk):
+            paths = [it["filename"] for it in it_list]
+            texts = transcribe_files(model, paths, language=_qwen_lang)
             for j, it in enumerate(it_list):
-                it['text'] = results[j].text
+                it["text"] = texts[j] if j < len(texts) else ""
+                if not it["text"]:
+                    logger.warning(
+                        f"Qwen ASR returned empty text for {it.get('filename')} "
+                        f"(chunk {i * 8 + j + 1})"
+                    )
             srts_chunk[i] = it_list
-            _write_log(logs_file, json.dumps({"type": "subtitle", "text": "\n".join([it['text'] for it in it_list])}))
+            _write_log(
+                logs_file,
+                json.dumps(
+                    {
+                        "type": "subtitle",
+                        "text": "\n".join([it["text"] for it in it_list]),
+                    }
+                ),
+            )
 
         return srts, None
     except Exception as e:

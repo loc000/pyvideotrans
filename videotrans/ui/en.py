@@ -702,6 +702,9 @@ class Ui_MainWindow(object):
         self.action_realtime_stt = QtGui.QAction(MainWindow)
         self.action_realtime_stt.setObjectName("action_realtime_stt")
 
+        self.action_live_captions = QtGui.QAction(MainWindow)
+        self.action_live_captions.setObjectName("action_live_captions")
+
         self.action_textmatching = QtGui.QAction(MainWindow)
         self.action_textmatching.setObjectName("action_textmatching")
         self.action_textmatching.setObjectName("action_textmatching")
@@ -870,6 +873,8 @@ class Ui_MainWindow(object):
         self.menu.addSeparator()
         self.menu.addAction(self.action_realtime_stt)
         self.menu.addSeparator()
+        self.menu.addAction(self.action_live_captions)
+        self.menu.addSeparator()
         self.menu.addAction(self.action_textmatching)
         self.menu.addSeparator()
         self.menu.addAction(self.action_yingyinhebing)
@@ -940,6 +945,7 @@ class Ui_MainWindow(object):
         self.toolBar.addAction(self.action_tiquzimu)
 
         self.toolBar.addAction(self.action_yuyinshibie)
+        self.toolBar.addAction(self.action_live_captions)
         self.toolBar.addAction(self.action_fanyi)
         self.toolBar.addAction(self.action_yuyinhecheng)
         self.toolBar.addAction(self.actionsrtmultirole)
@@ -1138,6 +1144,10 @@ class Ui_MainWindow(object):
         self.action_clipvideo.setText(tr("Edit video on subtitles"))
         self.action_clipvideo.setToolTip(tr("Edit video on subtitles"))
         self.action_realtime_stt.setText(tr("Real-time speech-to-text"))
+        self.action_live_captions.setText(tr("Live captions"))
+        self.action_live_captions.setToolTip(
+            tr("Live captions overlay with optional translation for meetings and presentations")
+        )
         self.action_textmatching.setText(tr("Text matching and timing"))
         self.action_textmatching.setToolTip(tr("Text matching and timing"))
 
