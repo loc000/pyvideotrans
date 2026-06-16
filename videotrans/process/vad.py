@@ -21,35 +21,48 @@ def get_speech_timestamp_silero(input_wav,
         f'[silero-VAD]Fix:VAD断句参数：{threshold=},{min_speech_duration_ms=}ms,{max_speech_duration_ms=}ms,{min_silent_duration_ms=}ms')
 
     sampling_rate = 16000
-    from faster_whisper.audio import decode_audio
-    from faster_whisper.vad import (
-        VadOptions,
-        get_speech_timestamps
-    )
-    vad_p = {
-        "threshold": threshold,
-        "min_speech_duration_ms": min_speech_duration_ms,
-        "max_speech_duration_s": float(max_speech_duration_ms / 1000.0),
-        "min_silence_duration_ms": min_silent_duration_ms,
-    }
+    try:
+        from faster_whisper.audio import decode_audio
+        from faster_whisper.vad import (
+            VadOptions,
+            get_speech_timestamps
+        )
+        vad_p = {
+            "threshold": threshold,
+            "min_speech_duration_ms": min_speech_duration_ms,
+            "max_speech_duration_s": float(max_speech_duration_ms / 1000.0),
+            "min_silence_duration_ms": min_silent_duration_ms,
+        }
 
-    def convert_to_milliseconds(timestamps):
-        milliseconds_timestamps = []
-        for timestamp in timestamps:
-            milliseconds_timestamps.append(
-                [
-                    int(round(timestamp["start"] / sampling_rate * 1000)),
-                    int(round(timestamp["end"] / sampling_rate * 1000)),
-                ]
-            )
+        def convert_to_milliseconds(timestamps):
+            milliseconds_timestamps = []
+            for timestamp in timestamps:
+                milliseconds_timestamps.append(
+                    [
+                        int(round(timestamp["start"] / sampling_rate * 1000)),
+                        int(round(timestamp["end"] / sampling_rate * 1000)),
+                    ]
+                )
 
-        return milliseconds_timestamps
+            return milliseconds_timestamps
 
-    speech_chunks = get_speech_timestamps(decode_audio(input_wav,
-                                                       sampling_rate=sampling_rate),
-                                          vad_options=VadOptions(**vad_p)
-                                          )
-    return convert_to_milliseconds(speech_chunks),None
+        audio = decode_audio(input_wav, sampling_rate=sampling_rate)
+        speech_chunks = get_speech_timestamps(
+            audio,
+            vad_options=VadOptions(**vad_p),
+        )
+        result = convert_to_milliseconds(speech_chunks)
+        if not result and audio is not None and len(audio) > 0:
+            duration_ms = int(len(audio) / sampling_rate * 1000)
+            if duration_ms > 0:
+                result = [[0, duration_ms]]
+                logger.debug(
+                    f"[silero-VAD] no speech segments; fallback to full audio {duration_ms}ms"
+                )
+        return result, None
+    except Exception as e:
+        msg = traceback.format_exc()
+        return False, f"{e} {msg}"
 
 
 def get_speech_timestamp(input_wav=None,

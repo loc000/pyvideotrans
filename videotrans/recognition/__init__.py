@@ -1,11 +1,15 @@
+import importlib.util
+import uuid as uuid_mod
 from pathlib import Path
 from typing import Union, List, Type
 
 from videotrans import winform, ChannelProvider, get_class
 from videotrans.configure import contants
-from videotrans.configure.config import tr, params, app_cfg, logger, ROOT_DIR, settings
+from videotrans.configure.config import tr, params, app_cfg, logger, ROOT_DIR, settings, TEMP_DIR
+from videotrans.configure.excepts import SpeechToTextError
 from videotrans.recognition._base import BaseRecogn
 from videotrans.task.taskcfg import SrtItem
+from videotrans.recognition._constants import LIVE_CAPTIONS_UUID_PREFIX
 
 FASTER_WHISPER = 0
 OPENAI_WHISPER = 1
@@ -152,6 +156,19 @@ def is_input_api(recogn_type: int = None, return_str=False):
     return True
 
 
+def check_qwen_asr_installed() -> bool:
+    """Qwen-ASR local channel needs optional PyPI package `qwen-asr` (import: qwen_asr)."""
+    ok = importlib.util.find_spec("qwen_asr") is not None
+    if not ok:
+        raise SpeechToTextError(
+            tr(
+                "Qwen-ASR requires optional package qwen-asr. "
+                "Install with: uv sync --extra qwen-asr"
+            )
+        )
+    return True
+
+
 # 统一入口
 def run(*,
         detect_language=None,
@@ -168,6 +185,9 @@ def run(*,
 
         ) -> Union[List[SrtItem], None]:
     if app_cfg.exit_soft or (uuid and uuid in app_cfg.stoped_uuid_set): return
+    if not uuid:
+        uuid = f"recogn_{uuid_mod.uuid4().hex[:12]}"
+    Path(f"{TEMP_DIR}/{uuid}").mkdir(parents=True, exist_ok=True)
     kwargs = {
         "detect_language": detect_language,
         "audio_file": audio_file,
@@ -184,5 +204,8 @@ def run(*,
     _cls: Union[Type[BaseRecogn], None] = get_class(recogn_type, "recognition", _ID_NAME_DICT)
     if not _cls:
         raise RuntimeError(f'No this Recognition Channel:{recogn_type=}')
+
+    if recogn_type == QWENASR:
+        check_qwen_asr_installed()
 
     return _cls(**kwargs).run()  # type:ignore

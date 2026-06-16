@@ -13,31 +13,26 @@ from videotrans.util import tools
 @dataclass
 class FunasrRecogn(BaseRecogn):
 
+    def _download(self):
+        from videotrans import recognition
+        from videotrans.recognition.model_assets import ensure_assets
+
+        ensure_assets(
+            recognition.FUNASR_CN,
+            self.model_name,
+            detect_language=self.detect_language,
+            callback=self._process_callback,
+        )
+
+    def _resolve_model_name(self) -> str:
+        from videotrans.recognition.model_assets import resolve_funasr_model_name
+
+        return resolve_funasr_model_name(self.model_name, self.detect_language)
+
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit():
             return
-        tools.check_and_down_ms(model_id='damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch',callback=self._process_callback)
-
-        if self.model_name == 'paraformer-zh' and self.detect_language[:2].lower() not in ['zh', 'en']:
-            self.model_name = 'FunAudioLLM/Fun-ASR-MLT-Nano-2512' if self.detect_language[:2] not in ['zh','en','ja','yu'] else 'FunAudioLLM/Fun-ASR-Nano-2512'
-            tools.check_and_down_ms(model_id=self.model_name,callback=self._process_callback)
-        elif self.model_name == 'SenseVoiceSmall':
-            self.model_name = 'iic/SenseVoiceSmall'
-        elif self.model_name == 'Fun-ASR-Nano-2512':
-            if self.detect_language[:2] not in ['zh', 'en', 'ja', 'yu']:
-                self.model_name = f'FunAudioLLM/Fun-ASR-MLT-Nano-2512'
-            else:
-                self.model_name = f'FunAudioLLM/Fun-ASR-Nano-2512'
-        elif self.model_name != 'paraformer-zh':
-            self.model_name = f'FunAudioLLM/Fun-ASR-MLT-Nano-2512'
-
-        if self.model_name == 'paraformer-zh':
-            tools.check_and_down_ms(model_id='iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch',callback=self._process_callback)
-            tools.check_and_down_ms(model_id='damo/speech_fsmn_vad_zh-cn-16k-common-pytorch',callback=self._process_callback)
-            tools.check_and_down_ms(model_id='damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch',callback=self._process_callback)
-            tools.check_and_down_ms(model_id='damo/speech_campplus_sv_zh-cn_16k-common',callback=self._process_callback)
-        else:
-            tools.check_and_down_ms(model_id=self.model_name,callback=self._process_callback)
+        self.model_name = self._resolve_model_name()
         self.signal(text=f"load {self.model_name}")
         logs_file = f'{TEMP_DIR}/{self.uuid}/funasr-{self.detect_language}-{time.time()}.log'
         if self.model_name != 'paraformer-zh':

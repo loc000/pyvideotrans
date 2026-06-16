@@ -2,6 +2,8 @@ import re, time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Union
+
+from videotrans.recognition._constants import LIVE_CAPTIONS_UUID_PREFIX
 from tenacity import RetryError
 from videotrans.configure.excepts import SpeechToTextError
 from videotrans.configure.config import tr, settings, logger, TEMP_DIR
@@ -111,7 +113,13 @@ class BaseRecogn(BaseCon):
                 it['line'] = len(srt_list) + 1
                 srt_list.append(it)
             else:
-                logger.warning(f'移除无效字幕行,全部由符号组成的行：{i=},{text=}')
+                from videotrans.recognition._constants import LIVE_CAPTIONS_UUID_PREFIX
+                _live = LIVE_CAPTIONS_UUID_PREFIX in str(getattr(self, 'uuid', '') or '')
+                _msg = f'移除无效字幕行,全部由符号组成的行：{i=},{text=}'
+                if _live:
+                    logger.debug(f'[live] {_msg}')
+                else:
+                    logger.warning(_msg)
 
         if not srt_list:
             return []
@@ -187,7 +195,41 @@ class BaseRecogn(BaseCon):
                 raise
         self.signal(text=f'[VAD] process ended {int(time.time() - _st)}s')
 
+    def _is_live_chunk(self) -> bool:
+        u = str(self.uuid or "")
+        c = str(self.cache_folder or "")
+        return u.startswith(LIVE_CAPTIONS_UUID_PREFIX) or LIVE_CAPTIONS_UUID_PREFIX in c
+
+    def _cut_audio_whole_file(self) -> List[SrtItem]:
+        """Live captions: skip VAD; transcribe the rolling chunk as one clip."""
+        audio = AudioSegment.from_wav(self.audio_file)
+        duration_ms = len(audio)
+        if duration_ms < 300:
+            logger.debug(f"[live] skip chunk shorter than 300ms ({duration_ms}ms)")
+            return []
+        dir_name = f"{self.cache_folder or TEMP_DIR}/clip_{time.time()}"
+        Path(dir_name).mkdir(parents=True, exist_ok=True)
+        file_name = f"{dir_name}/audio_0.wav"
+        audio.set_frame_rate(16000).set_channels(1).export(file_name, format="wav")
+        startraw = tools.ms_to_time_string(ms=0)
+        endraw = tools.ms_to_time_string(ms=duration_ms)
+        logger.debug(f"[live] whole-file segment {duration_ms}ms -> {file_name}")
+        return [
+            SrtItem(
+                line=1,
+                text="",
+                start_time=0,
+                end_time=duration_ms,
+                startraw=startraw,
+                endraw=endraw,
+                time=f"{startraw} --> {endraw}",
+                filename=file_name,
+            )
+        ]
+
     def cut_audio(self) -> List[SrtItem]:
+        if self._is_live_chunk():
+            return self._cut_audio_whole_file()
         dir_name = f"{TEMP_DIR}/clip_{time.time()}"
         Path(dir_name).mkdir(parents=True, exist_ok=True)
         if not self.speech_timestamps:

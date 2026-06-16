@@ -36,12 +36,14 @@ class FasterAll(BaseRecogn):
         return raws
 
     def _download(self):
-        if self.recogn_type == 0:
-            if self.model_name in FASTER_MODELS_DICT:
-                repo_id = FASTER_MODELS_DICT[self.model_name]
-            else:
-                repo_id = self.model_name
-            tools.check_and_down_hf(self.model_name,repo_id,self.local_dir,callback=self._process_callback)
+        from videotrans.recognition.model_assets import ensure_assets
+
+        ensure_assets(
+            self.recogn_type,
+            self.model_name,
+            detect_language=self.detect_language,
+            callback=self._process_callback,
+        )
         # 批量时预先vad切分
         # 否则后断句处理
         if settings.get('whisper_prepare'):

@@ -1,13 +1,11 @@
 import json
+import time
 from dataclasses import dataclass, asdict
-from typing import List,  Union
-
 from pathlib import Path
-import  time
-
-from videotrans.configure.config import  logger, defaulelang, ROOT_DIR, TEMP_DIR
+from typing import List, Union
 
 from videotrans.recognition._base import BaseRecogn
+from videotrans.recognition import check_qwen_asr_installed
 from videotrans.task.taskcfg import SrtItem
 from videotrans.util import tools
 from videotrans.process import qwen3asr_fun
@@ -17,17 +15,19 @@ from videotrans.process import qwen3asr_fun
 class QwenasrlocalRecogn(BaseRecogn):
 
     def _download(self):
-        if defaulelang == 'zh':
-            tools.check_and_down_ms(f'Qwen/Qwen3-ASR-{self.model_name}', callback=self._process_callback,
-                                    local_dir=f'{ROOT_DIR}/models/models--Qwen--Qwen3-ASR-{self.model_name}')
-        else:
-            tools.check_and_down_hf(model_id=f'Qwen3-ASR-{self.model_name}',
-                                    repo_id=f'Qwen/Qwen3-ASR-{self.model_name}',
-                                    local_dir=f'{ROOT_DIR}/models/models--Qwen--Qwen3-ASR-{self.model_name}',
-                                    callback=self._process_callback)
+        from videotrans import recognition
+        from videotrans.recognition.model_assets import ensure_assets
+
+        ensure_assets(
+            recognition.QWENASR,
+            self.model_name,
+            detect_language=self.detect_language,
+            callback=self._process_callback,
+        )
 
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit(): return
+        check_qwen_asr_installed()
 
         logs_file = f'{TEMP_DIR}/{self.uuid}/qwen3tts-{time.time()}.log'
         title = "Qwen3-ASR"
@@ -38,7 +38,8 @@ class QwenasrlocalRecogn(BaseRecogn):
             "logs_file": logs_file,
             "is_cuda": self.is_cuda,
             "audio_file": self.audio_file,
-            "model_name": self.model_name
+            "model_name": self.model_name,
+            "detect_language": self.detect_language,
         }
         jsdata = self._new_process(callback=qwen3asr_fun, title=title, is_cuda=self.is_cuda, kwargs=kwargs)
         logger.debug(f'Qwen-asr返回的字词时间戳数据:{jsdata=}')

@@ -270,6 +270,9 @@ qwen-tts = [
 qwen-asr = [
     "qwen-asr",
 ]
+loopback = [
+    "pyaudiowpatch>=0.2.12.6; sys_platform == 'win32'",
+]
 
 [dependency-groups]
 dev = [
