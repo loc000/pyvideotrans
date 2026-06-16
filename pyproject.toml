@@ -270,6 +270,12 @@ qwen-tts = [
 qwen-asr = [
     "qwen-asr",
 ]
+# MiMo-V2.5-ASR: no PyPI package. Clone inference repo manually:
+#   git clone https://github.com/XiaomiMiMo/MiMo-V2.5-ASR.git models/MiMo-V2.5-ASR-inference
+#   cd models/MiMo-V2.5-ASR-inference && pip install -r requirements.txt
+# Nemotron-3.5-ASR streaming: requires NVIDIA NeMo (Linux/CUDA recommended):
+#   pip install Cython packaging
+#   pip install git+https://github.com/NVIDIA/NeMo.git@main#egg=nemo_toolkit[asr]
 loopback = [
     "pyaudiowpatch>=0.2.12.6; sys_platform == 'win32'",
 ]

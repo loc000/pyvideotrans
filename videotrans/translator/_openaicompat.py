@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Union
-from openai import OpenAI, NotFoundError, AuthenticationError, PermissionDeniedError
+from openai import OpenAI
 from tenacity import before_log, retry_if_not_exception_type, wait_fixed, stop_after_attempt, after_log, retry
 
 from videotrans.configure.excepts import NO_RETRY_EXCEPT, TranslateSrtError, LLMSegmentError, StopTask
@@ -15,6 +15,7 @@ from videotrans.translator._base import BaseTrans
 from openai import LengthFinishReasonError
 
 from videotrans.util import tools
+from videotrans.util.help_http_debug import format_chat_request_debug_block
 
 
 @dataclass
@@ -32,6 +33,21 @@ class OpenAICampat(BaseTrans):
         super().__post_init__()
         self.temperature=float(settings.get('aitrans_temperature', 0.2))
         self.prompt = tools.get_prompt(ainame=self.ainame,aisendsrt=self.aisendsrt).replace('{lang}',self.target_language_name)
+
+    def _chat_completions_create(self, client, kwargs: dict):
+        """Call chat.completions.create; on failure attach curl debug info."""
+        try:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            from videotrans.configure.excepts import get_msg_from_except
+
+            debug = format_chat_request_debug_block(
+                base_url=self.api_url,
+                api_key=self.api_key,
+                kwargs=kwargs,
+                proxy=getattr(self, "proxy_str", None),
+            )
+            raise StopTask(f"{get_msg_from_except(e)}\n\n{debug}") from e
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),after=after_log(logger, logging.INFO))
     def _item_task(self, data: Union[List[str], str]) -> str:
@@ -65,11 +81,8 @@ class OpenAICampat(BaseTrans):
             "extra_body":self.extra_body
         }
 
-        try:
-            model = OpenAI(api_key=self.api_key, base_url=self.api_url)
-            response = model.chat.completions.create(**kwargs)
-        except (NotFoundError,AuthenticationError,PermissionDeniedError) as e:
-            raise StopTask(e.message) from e
+        model = OpenAI(api_key=self.api_key, base_url=self.api_url)
+        response = self._chat_completions_create(model, kwargs)
 
         logger.debug(f'字幕翻译:[{self.ainame},{self.model_name},{self.api_url}]')
         result = ""
@@ -111,15 +124,26 @@ class OpenAICampat(BaseTrans):
                     'content': f"""```srt\n{srt}\n```"""
                 }
             ]
+            seg_kwargs = {
+                "model": model_name,
+                "frequency_penalty": 0,
+                "max_completion_tokens": max_tokens,
+                "messages": message,
+                "temperature": 0.2,
+                "timeout": 300,
+            }
             model = OpenAI(api_key=api_key, base_url=api_url)
-            response = model.chat.completions.create(
-                model=model_name,
-                frequency_penalty=0,
-                max_completion_tokens=max_tokens,
-                messages=message,
-                temperature=0.2,
-                timeout=300  # 超过5分钟为失败
-            )
+            try:
+                response = model.chat.completions.create(**seg_kwargs)
+            except Exception as e:
+                from videotrans.configure.excepts import get_msg_from_except
+
+                debug = format_chat_request_debug_block(
+                    base_url=api_url,
+                    api_key=api_key,
+                    kwargs=seg_kwargs,
+                )
+                raise LLMSegmentError(f"{get_msg_from_except(e)}\n\n{debug}") from e
             if not hasattr(response, 'choices') or not response.choices:
                 logger.warning(f'[{self.ainame}]重新断句失败:{response=}')
                 raise LLMSegmentError(f"{response}")

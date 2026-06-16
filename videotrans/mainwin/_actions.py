@@ -108,7 +108,8 @@ class WinAction(WinActionBase):
         if recogn_type not in [recognition.FASTER_WHISPER, recognition.OPENAI_WHISPER, recognition.Faster_Whisper_XXL,
                                recognition.FUNASR_CN, recognition.Deepgram, recognition.Whisper_CPP,
                                recognition.WHISPERX_API, recognition.HUGGINGFACE_ASR, recognition.QWENASR,
-                               recognition.WHISPER_NET]:
+                               recognition.WHISPER_NET, recognition.MIMO_ASR, recognition.NEMOTRON_ASR,
+                               recognition.OPENROUTER_ASR]:
 
             # 禁止模块选择
             self.main.model_name.setDisabled(True)
@@ -131,6 +132,14 @@ class WinAction(WinActionBase):
 
             elif recogn_type == recognition.QWENASR:
                 self.main.model_name.addItems(['1.7B', '0.6B'])
+            elif recogn_type == recognition.MIMO_ASR:
+                self.main.model_name.addItems(recognition.MIMO_ASR_MODELS)
+            elif recogn_type == recognition.NEMOTRON_ASR:
+                self.main.model_name.addItems(recognition.NEMOTRON_ASR_MODELS)
+            elif recogn_type == recognition.OPENROUTER_ASR:
+                self.main.model_name.addItems(
+                    [x.strip() for x in str(settings.get('openrouter_asr_model', '')).split(',') if x.strip()]
+                )
             elif recogn_type == recognition.HUGGINGFACE_ASR:
                 self.main.model_name.addItems(list(recognition.HUGGINGFACE_ASR_MODELS.keys()))
             else:

@@ -44,6 +44,7 @@ from videotrans.ui.minimaxi import Ui_minimaxiform
 from videotrans.ui.mosstts import Ui_mossttsform
 from videotrans.ui.omnivoice import Ui_omnivoiceform
 from videotrans.ui.openairecognapi import Ui_openairecognapiform
+from videotrans.ui.openrouterasr import Ui_openrouterasrform
 from videotrans.ui.openaitts import Ui_openaittsform
 from videotrans.ui.openrouter import Ui_openrouterform
 from videotrans.ui.ott import Ui_ottform
@@ -170,6 +171,11 @@ class DeepgramForm(QDialogBase, Ui_deepgramform):  # <===
 
 
 class OpenaiRecognAPIForm(QDialogBase, Ui_openairecognapiform):  # <===
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+
+class OpenRouterASRForm(QDialogBase, Ui_openrouterasrform):  # <===
     def __init__(self, parent=None):
         super().__init__(parent)
 

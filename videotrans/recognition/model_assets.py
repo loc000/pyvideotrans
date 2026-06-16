@@ -40,7 +40,26 @@ def local_dir_for(recogn_type: int, model_name: str) -> Path:
         return Path(f"{ROOT_DIR}/models/models--{model_name.replace('/', '--')}")
     if recogn_type == recognition.QWENASR:
         return Path(f"{ROOT_DIR}/models/models--Qwen--Qwen3-ASR-{model_name}")
+    if recogn_type == recognition.MIMO_ASR:
+        from videotrans.recognition._constants import DEFAULT_MIMO_ASR_MODEL
+
+        repo = model_name or DEFAULT_MIMO_ASR_MODEL
+        return Path(f"{ROOT_DIR}/models/models--{repo.replace('/', '--')}")
+    if recogn_type == recognition.NEMOTRON_ASR:
+        from videotrans.recognition._constants import NEMOTRON_ASR_MODEL
+
+        repo = model_name or NEMOTRON_ASR_MODEL
+        return Path(f"{ROOT_DIR}/models/models--{repo.replace('/', '--')}")
     return Path(f"{ROOT_DIR}/models")
+
+
+def mimo_tokenizer_dir() -> Path:
+    from videotrans.recognition._constants import MIMO_AUDIO_TOKENIZER_REPO
+
+    return Path(
+        f"{ROOT_DIR}/models/models--"
+        f"{MIMO_AUDIO_TOKENIZER_REPO.replace('/', '--')}"
+    )
 
 
 def resolve_funasr_model_name(model_name: str, detect_language: str) -> str:
@@ -96,6 +115,25 @@ def resolve_assets(
             assets.append(
                 ModelAsset("hf", f"Qwen3-ASR-{model_name}", repo, d)
             )
+    elif recogn_type == recognition.MIMO_ASR:
+        from videotrans.recognition._constants import (
+            DEFAULT_MIMO_ASR_MODEL,
+            MIMO_AUDIO_TOKENIZER_REPO,
+        )
+
+        asr_repo = model_name or DEFAULT_MIMO_ASR_MODEL
+        d_asr = str(local_dir_for(recognition.MIMO_ASR, asr_repo))
+        assets.append(ModelAsset("hf", asr_repo, asr_repo, d_asr))
+        d_tok = str(mimo_tokenizer_dir())
+        assets.append(
+            ModelAsset("hf", MIMO_AUDIO_TOKENIZER_REPO, MIMO_AUDIO_TOKENIZER_REPO, d_tok)
+        )
+    elif recogn_type == recognition.NEMOTRON_ASR:
+        from videotrans.recognition._constants import NEMOTRON_ASR_MODEL
+
+        asr_repo = model_name or NEMOTRON_ASR_MODEL
+        d_asr = str(local_dir_for(recognition.NEMOTRON_ASR, asr_repo))
+        assets.append(ModelAsset("hf", asr_repo, asr_repo, d_asr))
     elif recogn_type == recognition.FUNASR_CN:
         resolved = resolve_funasr_model_name(model_name, detect_language)
         assets.append(
@@ -125,6 +163,10 @@ def ensure_assets(
 
     if recogn_type == recognition.QWENASR:
         recognition.check_qwen_asr_installed()
+    if recogn_type == recognition.MIMO_ASR:
+        recognition.check_mimo_asr_installed()
+    if recogn_type == recognition.NEMOTRON_ASR:
+        recognition.check_nemotron_asr_installed()
 
     for asset in resolve_assets(
         recogn_type, model_name, detect_language=detect_language
@@ -164,6 +206,7 @@ def execution_mode(recogn_type: int, *, live: bool = False) -> ExecutionMode:
             recognition.QWEN3ASR,
             recognition.Deepgram,
             recognition.WHISPERX_API,
+            recognition.OPENROUTER_ASR,
         ):
             return ExecutionMode.API
         if recogn_type == recognition.FUNASR_CN:
@@ -175,6 +218,7 @@ def execution_mode(recogn_type: int, *, live: bool = False) -> ExecutionMode:
         recognition.GEMINI_SPEECH,
         recognition.QWEN3ASR,
         recognition.Deepgram,
+        recognition.OPENROUTER_ASR,
     ):
         return ExecutionMode.API
     return ExecutionMode.SUBPROCESS

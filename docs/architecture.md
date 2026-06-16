@@ -1063,6 +1063,37 @@ flowchart TB
 
 ---
 
+## 十六、MiMo-V2.5-ASR 本地识别渠道
+
+渠道 ID：`MIMO_ASR = 22`，实现类 [`videotrans/recognition/_mimoasrlocal.py`](videotrans/recognition/_mimoasrlocal.py)。
+
+### 16.1 依赖资产
+
+| 资产 | Hugging Face | 用途 |
+|------|----------------|------|
+| ASR 权重 | 默认 `LeaderboardModel1/MiMo-V2.5-ASR-AutoRound-W4A16-RTN`，可选 `XiaomiMiMo/MiMo-V2.5-ASR` | `model_path` |
+| 音频 tokenizer | `XiaomiMiMo/MiMo-Audio-Tokenizer`（固定） | `tokenizer_path` |
+| 推理代码 | 克隆 [XiaomiMiMo/MiMo-V2.5-ASR](https://github.com/XiaomiMiMo/MiMo-V2.5-ASR) 至 `{ROOT_DIR}/models/MiMo-V2.5-ASR-inference` | `MimoAudio.asr_sft()` |
+
+下载由 [`model_assets.ensure_assets`](videotrans/recognition/model_assets.py) 统一处理（两个 HF 仓库）。推理仓库需用户手动 `git clone` 并安装其 `requirements.txt`（上游推荐 Linux + Python 3.12 + CUDA；本应用为 Python 3.10，Windows 上为实验性支持）。
+
+### 16.2 处理流程
+
+与 Qwen 本地 ASR 相同：`BaseRecogn.cut_audio()` → 子进程 [`mimo_asr_fun`](videotrans/process/mimo_asr_fun.py) → [`mimo_asr_load`](videotrans/recognition/mimo_asr_load.py) 加载模型并调用 `asr_sft()`。
+
+语言：`zh` / `en` / `auto` 映射为 `audio_tag` `<chinese>` / `<english>` / 自动（见 `mimo_asr_lang.py`）。
+
+### 16.3 内存参考
+
+| 模型 | 粗略占用 |
+|------|----------|
+| AutoRound W4A16 量化版 | ~4–8 GB+ |
+| 官方 bf16 全精度 | 更高，视 GPU 而定 |
+
+直播分块识别走子进程（未接入 `LiveModelSession` 内联）。
+
+---
+
 > **版本**: v4.00 (VERSION_NUM=120400)
 > **主页**: https://github.com/jianchang512/pyvideotrans
 > **文档**: https://pyvideotrans.com

@@ -30,6 +30,7 @@ from videotrans.component.realtime_engine import (
     CheckAudioDevices,
     ChunkedRecognWorker,
     LIVE_SHERPA_RECOGN,
+    NemotronStreamWorker,
     Worker,
     models_ready,
 )
@@ -54,10 +55,14 @@ _CUDA_RECOGN_TYPES = {
     recognition.FASTER_WHISPER,
     recognition.OPENAI_WHISPER,
     recognition.QWENASR,
+    recognition.MIMO_ASR,
+    recognition.NEMOTRON_ASR,
     recognition.FUNASR_CN,
     recognition.HUGGINGFACE_ASR,
     recognition.WHISPER_NET,
 }
+
+_LIVE_STREAMING_RECOGN_TYPES = {LIVE_SHERPA_RECOGN, recognition.NEMOTRON_ASR}
 
 
 @dataclass
@@ -408,8 +413,8 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
     def _init_recogn_combo(self):
         self.recogn_combo.clear()
         self.recogn_combo.addItem(tr("Realtime Paraformer (Local)"), LIVE_SHERPA_RECOGN)
-        for i, name in enumerate(recognition.RECOGN_NAME_LIST):
-            self.recogn_combo.addItem(name, i)
+        for channel_id, provider in recognition._ID_NAME_DICT.items():
+            self.recogn_combo.addItem(provider.name, channel_id)
         try:
             saved = int(params.get("live_caption_recogn_type", params.get("stt_recogn_type", LIVE_SHERPA_RECOGN)))
         except (TypeError, ValueError):
@@ -421,12 +426,12 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
 
     def _on_recogn_type_change(self):
         recogn_type = self.recogn_combo.currentData()
-        is_sherpa = recogn_type == LIVE_SHERPA_RECOGN
-        self.chunk_label.setVisible(not is_sherpa)
-        self.chunk_spin.setVisible(not is_sherpa)
+        is_streaming = recogn_type in _LIVE_STREAMING_RECOGN_TYPES
+        self.chunk_label.setVisible(not is_streaming)
+        self.chunk_spin.setVisible(not is_streaming)
         self.chk_cuda.setVisible(recogn_type in _CUDA_RECOGN_TYPES)
 
-        if not is_sherpa:
+        if not is_streaming:
             if recogn_type == recognition.Faster_Whisper_XXL and not self._show_xxl_select():
                 return
             if recogn_type == recognition.Whisper_CPP and not self._show_cpp_select():
@@ -445,7 +450,7 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
         else:
             self.recogn_model.setDisabled(True)
 
-        if is_sherpa:
+        if is_streaming:
             self.status_label.setText("")
         else:
             self.status_label.setText(
@@ -675,7 +680,7 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
             self._show_download_progress(tr("Please wait"))
             return
         if not self.transcribing:
-            if recogn_type != LIVE_SHERPA_RECOGN:
+            if recogn_type not in _LIVE_STREAMING_RECOGN_TYPES:
                 if recogn_type == recognition.Faster_Whisper_XXL and not self._show_xxl_select():
                     return
                 if recogn_type == recognition.Whisper_CPP and not self._show_cpp_select():
@@ -708,7 +713,9 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
                 app_cfg.proxy = proxy
                 tools.set_proxy(proxy)
             self.status_label.setText(tr("Please wait"))
-            if recogn_type != LIVE_SHERPA_RECOGN:
+            if recogn_type == recognition.NEMOTRON_ASR:
+                self._show_download_progress(tr("Downloading please wait"))
+            elif recogn_type not in _LIVE_STREAMING_RECOGN_TYPES:
                 self._show_download_progress(tr("Downloading please wait"))
             self._session_start = time.time()
             self._last_segment_end_ms = 0
@@ -722,6 +729,21 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
                 )
             if recogn_type == LIVE_SHERPA_RECOGN:
                 self.worker = Worker(capture_device=capture, record_dir=LIVE_CAPTIONS_DIR)
+            elif recogn_type == recognition.NEMOTRON_ASR:
+                try:
+                    recognition.check_nemotron_asr_installed()
+                except Exception as e:
+                    return tools.show_error(str(e))
+                langcode = translator.get_audio_code(
+                    show_source=self.recogn_lang.currentText()
+                )
+                self.worker = NemotronStreamWorker(
+                    capture_device=capture,
+                    model_name=self.recogn_model.currentText(),
+                    detect_language=langcode,
+                    is_cuda=self.chk_cuda.isChecked(),
+                    record_dir=LIVE_CAPTIONS_DIR,
+                )
             else:
                 langcode = translator.get_audio_code(
                     show_source=self.recogn_lang.currentText()
@@ -764,7 +786,7 @@ class LiveCaptionsWindow(RealtimeUiBase, QWidget):
     def _on_ready(self):
         if self.download_log.isVisible() and not self._model_downloading:
             QTimer.singleShot(1500, self.download_log.hide)
-        if self.recogn_combo.currentData() == LIVE_SHERPA_RECOGN:
+        if self.recogn_combo.currentData() in _LIVE_STREAMING_RECOGN_TYPES:
             self.status_label.setText(tr("Please speak"))
         else:
             self.status_label.setText(

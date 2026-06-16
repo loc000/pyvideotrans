@@ -187,6 +187,7 @@ titles = {
     "ai302_models": "302.AI翻译模型",
     "ai302tts_models": "302.AI-TTS模型",
     "openairecognapi_model": "OpenAI语音识别模型",
+    "openrouter_asr_model": "OpenRouter语音识别模型",
     "chatgpt_model": "ChatGPT模型列表",
     "noise_separate_nums": "人声背景分离线程数",
     "openaitts_model": "OpenAI TTS模型列表",
@@ -451,6 +452,7 @@ if defaulelang != 'zh':
 
         "noise_separate_nums": "Threads nums for separation",
         "openairecognapi_model": "OpenAI speech recognition model",
+        "openrouter_asr_model": "OpenRouter speech recognition model",
         "chatgpt_model": "ChatGPT model list",
         "openaitts_model": "OpenAI TTS model list",
         "azure_model": "Azure model list",

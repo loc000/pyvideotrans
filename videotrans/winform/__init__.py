@@ -46,6 +46,7 @@ _module_map = {
 "minimax":".minimax",#翻译
 "mosstts":".mosstts",
 "openairecognapi":".openairecognapi",
+"openrouterasr":".openrouterasr",
 "openaitts":".openaitts",
 "openrouter":".openrouter",
 "ott":".ott",

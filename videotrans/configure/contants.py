@@ -150,6 +150,7 @@ Qwentts_Models='qwen3-tts-vd-2026-01-26,qwen3-tts-instruct-flash,qwen3-tts-flash
 Qpenaitts_Model="tts-1,tts-1-hd,gpt-4o-mini-tts"
 
 Openairecognapi_Model= "whisper-1,gpt-4o-transcribe,gpt-4o-mini-transcribe,gpt-4o-transcribe-diarize"
+OpenrouterASR_Model = "qwen/qwen3-asr-flash-2026-02-10,google/gemini-2.5-flash,google/gemini-2.5-pro,openai/gpt-4o-audio-preview,openai/gpt-4o-mini"
 
 Chatgpt_Model="gpt-5.5,gpt-5.5-pro,gpt-5.4-pro,gpt-5.4,gpt-5.4-mini,gpt-5,gpt-5-mini,gpt-4.1"
 Azure_Model="gpt-5.5,gpt-5.4-mini, gpt-5.4-nano, gpt-5.4, gpt-5.4-pro,gpt-5.1, gpt-5.1-chat"

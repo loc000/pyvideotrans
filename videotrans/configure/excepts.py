@@ -206,6 +206,23 @@ def _handle_connection_error_detail(error, lang):
     return base_message
 
 
+def _openai_api_error_message(e) -> str:
+    """Extract message from OpenAI SDK errors (body may be dict or HTML string)."""
+    if hasattr(e, "body"):
+        body = e.body
+        if isinstance(body, dict):
+            msg = body.get("message") or body.get("error", {}).get("message")
+            if msg:
+                return str(msg)
+        if body is not None:
+            text = str(body).strip()
+            if text:
+                return text[:500]
+    if hasattr(e, "message") and e.message:
+        return str(e.message)
+    return str(e)
+
+
 # 根据异常类型，返回整理后的可读性错误消息
 def get_msg_from_except(ex:Exception)->str:
     if isinstance(ex, VideoTransError):
@@ -236,8 +253,7 @@ def get_msg_from_except(ex:Exception)->str:
         # === 资源不存在问题 ===
         # === 请求参数问题 ===
         # === 服务端问题 ===
-        (InternalServerError, NotFoundError, BadRequestError, APIConnectionError, APIError): lambda e: e.body.get(
-            'message') if hasattr(e, 'body') and hasattr(e.body, 'get') else str(e),
+        (InternalServerError, NotFoundError, BadRequestError, APIConnectionError, APIError): _openai_api_error_message,
 
         LengthFinishReasonError: lambda e: (
             f'内容太长超出最大允许Token，请减小内容或增大max_token,或者降低每次发送字幕行数\n{e}' if lang == 'zh' else f'{e}'),

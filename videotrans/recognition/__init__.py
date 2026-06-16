@@ -9,7 +9,16 @@ from videotrans.configure.config import tr, params, app_cfg, logger, ROOT_DIR, s
 from videotrans.configure.excepts import SpeechToTextError
 from videotrans.recognition._base import BaseRecogn
 from videotrans.task.taskcfg import SrtItem
-from videotrans.recognition._constants import LIVE_CAPTIONS_UUID_PREFIX
+from videotrans.recognition._constants import (
+    LIVE_CAPTIONS_UUID_PREFIX,
+    MIMO_ASR_CHANNEL_ID,
+    MIMO_AUDIO_TOKENIZER_REPO,
+    MIMO_ASR_MODELS,
+    DEFAULT_MIMO_ASR_MODEL,
+    NEMOTRON_ASR_CHANNEL_ID,
+    NEMOTRON_ASR_MODELS,
+    NEMOTRON_ASR_MODEL,
+)
 
 FASTER_WHISPER = 0
 OPENAI_WHISPER = 1
@@ -40,12 +49,15 @@ STT_API = 18
 WHISPER_NET = 19
 CAMB_ASR = 20
 CUSTOM_API = 21
+MIMO_ASR = MIMO_ASR_CHANNEL_ID
+NEMOTRON_ASR = NEMOTRON_ASR_CHANNEL_ID
+OPENROUTER_ASR = 24
 
 # 允许切换不同模型的渠道
 ALLOW_CHANGE_MODEL = [FASTER_WHISPER, Faster_Whisper_XXL, Whisper_CPP,
                       OPENAI_WHISPER, FUNASR_CN, Deepgram,
                       WHISPERX_API, HUGGINGFACE_ASR, QWENASR,
-                      WHISPER_NET]
+                      WHISPER_NET, MIMO_ASR, NEMOTRON_ASR, OPENROUTER_ASR]
 
 # 渠道id对应的设置窗口和sk键名, key_name: 存储SK或api url的键，(app_cfg.params),win:对应winform中的映射
 _ID_NAME_DICT = {
@@ -79,6 +91,16 @@ _ID_NAME_DICT = {
     WHISPER_NET: ChannelProvider("Whisper.NET", imp="._whispernet"),
     CAMB_ASR: ChannelProvider("CAMB AI", key_name="camb_api_key", win="cambtts", imp="._camb"),
     CUSTOM_API: ChannelProvider(tr("Custom API"), key_name="recognapi_url", win="recognapi", imp="._recognapi"),
+    MIMO_ASR: ChannelProvider(tr("MiMo-V2.5-ASR (Local)"), imp="._mimoasrlocal"),
+    NEMOTRON_ASR: ChannelProvider(
+        tr("Nemotron-3.5-ASR Streaming (Local)"), imp="._nemotronasrlocal"
+    ),
+    OPENROUTER_ASR: ChannelProvider(
+        tr("OpenRouter"),
+        key_name="openrouter_asr_key",
+        win="openrouterasr",
+        imp="._openrouterasr",
+    ),
 }
 RECOGN_NAME_LIST = [it.name for it in _ID_NAME_DICT.values()]
 
@@ -113,12 +135,22 @@ def get_model_by_type(recogn_type: int) -> List[str]:
         return settings.Whisper_NET_MODEL_LIST
     if recogn_type == QWENASR:
         return ['1.7B', '0.6B']
+    if recogn_type == MIMO_ASR:
+        return list(MIMO_ASR_MODELS)
+    if recogn_type == NEMOTRON_ASR:
+        return list(NEMOTRON_ASR_MODELS)
     if recogn_type == FUNASR_CN:
         return contants.FUNASR_MODEL
     if recogn_type == HUGGINGFACE_ASR:
         return list(HUGGINGFACE_ASR_MODELS.keys())
     if recogn_type == OPENAI_WHISPER:
         return contants.Openai_Whisper_Models.split(',')
+    if recogn_type == OPENROUTER_ASR:
+        return [
+            x.strip()
+            for x in str(settings.get('openrouter_asr_model', '')).split(',')
+            if x.strip()
+        ]
 
     return settings.WHISPER_MODEL_LIST
 
@@ -128,7 +160,7 @@ def get_model_by_type(recogn_type: int) -> List[str]:
 def is_allow_lang(langcode: str = None, recogn_type: int = None, model_name=None):
     # faster-whisper/openai-whisper支持所有语言
     if recogn_type in [FASTER_WHISPER, OPENAI_WHISPER, WHISPERX_API, Faster_Whisper_XXL, Whisper_CPP, OPENAI_API,
-                       AI_302, GEMINI_SPEECH, WHISPER_NET]:
+                       AI_302, GEMINI_SPEECH, WHISPER_NET, OPENROUTER_ASR]:
         return True
     # huggingface_asr 渠道里的 openai 和 Systran 模型也支持所有语言
     if recogn_type == HUGGINGFACE_ASR and not HUGGINGFACE_ASR_MODELS.get(model_name):
@@ -137,9 +169,18 @@ def is_allow_lang(langcode: str = None, recogn_type: int = None, model_name=None
         if langcode not in HUGGINGFACE_ASR_MODELS[model_name]:
             return tr("Only support") + tr(HUGGINGFACE_ASR_MODELS[model_name])
         return True
+    if recogn_type == MIMO_ASR:
+        if not langcode or langcode == "auto":
+            return True
+        if langcode[:2].lower() in ("zh", "en"):
+            return True
+        return tr("Only support") + " zh,en,auto"
+    if recogn_type == NEMOTRON_ASR:
+        return True
     if (langcode == 'auto' or not langcode) and recogn_type not in [FASTER_WHISPER, OPENAI_WHISPER, GEMINI_SPEECH,
                                                                     ElevenLabs, Faster_Whisper_XXL, Whisper_CPP,
-                                                                    WHISPERX_API, AI_302, OPENAI_API, WHISPER_NET]:
+                                                                    WHISPERX_API, AI_302, OPENAI_API, WHISPER_NET,
+                                                                    MIMO_ASR, NEMOTRON_ASR, OPENROUTER_ASR]:
         return tr("Recognition language is only supported in faster-whisper or openai-whisper or Gemini  modes.")
 
     return True
@@ -153,6 +194,22 @@ def is_input_api(recogn_type: int = None, return_str=False):
     if _cls.key_name and not params.get(_cls.key_name):
         return "Please configure the API Key information of the Deepgram channel first." if return_str else winform.get_win(
             _cls.win).openwin()
+    return True
+
+
+def check_mimo_asr_installed() -> bool:
+    """MiMo-ASR local channel needs cloned XiaomiMiMo/MiMo-V2.5-ASR inference repo."""
+    from videotrans.recognition.mimo_asr_load import check_mimo_import
+
+    check_mimo_import()
+    return True
+
+
+def check_nemotron_asr_installed() -> bool:
+    """Nemotron streaming ASR requires NVIDIA NeMo toolkit."""
+    from videotrans.recognition.nemotron_asr_load import check_nemotron_import
+
+    check_nemotron_import()
     return True
 
 
@@ -207,5 +264,9 @@ def run(*,
 
     if recogn_type == QWENASR:
         check_qwen_asr_installed()
+    if recogn_type == MIMO_ASR:
+        check_mimo_asr_installed()
+    if recogn_type == NEMOTRON_ASR:
+        check_nemotron_asr_installed()
 
     return _cls(**kwargs).run()  # type:ignore

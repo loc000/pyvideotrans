@@ -18,7 +18,7 @@ from videotrans.task.taskcfg import SignMsg
 from videotrans.configure.contants import (
     no_proxy, DEFAULT_GEMINI_MODEL, OPENAITTS_ROLES, ChatTTS_VOICE, Qwentts_Models,
     Whisper_Models, Zijiehuoshan_Model, Zhipuai_Model, Localllm_Model, Azure_Model,
-    Chatgpt_Model, Openairecognapi_Model, Qpenaitts_Model, Qwenmt_Model, Ai302_Models,
+    Chatgpt_Model, Openairecognapi_Model, OpenrouterASR_Model, Qpenaitts_Model, Qwenmt_Model, Ai302_Models,
     Whisper_cpp_models, Deepseek_Model, Openrouter_Model, Guiji_Model, MINIMAX_MODELS, ELEVENLABS_TTS_MODELS, MINIMAX_TTS_MODELS,
     GEMINI_TTS_MODELS, XIAOMI_MODELS, XIAOMI_TTS_MODELS
 )
@@ -368,6 +368,7 @@ class AppSettings:
             'qwenmt_model': Qwenmt_Model,
             "openaitts_model": Qpenaitts_Model,
             "openairecognapi_model": Openairecognapi_Model,
+            "openrouter_asr_model": OpenrouterASR_Model,
             "chatgpt_model": Chatgpt_Model,
             "azure_model": Azure_Model,
             "localllm_model": Localllm_Model,
@@ -741,6 +742,10 @@ class AppParams:
             "openairecognapi_key": "",
             "openairecognapi_prompt": "",
             "openairecognapi_model": "whisper-1",
+            "openrouter_asr_url": "https://openrouter.ai/api/v1",
+            "openrouter_asr_key": "",
+            "openrouter_asr_prompt": "",
+            "openrouter_asr_model": str(settings.get('openrouter_asr_model', '-')).strip().split(',')[0],
             "parakeet_address": "",
             "clone_api": "",
             "clone_voicelist": ["clone"],

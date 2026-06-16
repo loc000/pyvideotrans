@@ -267,6 +267,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionxiaomi_key.triggered.connect(lambda: self.open_winform('xiaomi'))
         self.actionqwentts_key.triggered.connect(lambda: self.open_winform('qwentts'))
         self.actionopenairecognapi_key.triggered.connect(lambda: self.open_winform('openairecognapi'))
+        self.actionopenrouterasr_key.triggered.connect(lambda: self.open_winform('openrouterasr'))
         self.actiontts_fishtts.triggered.connect(lambda: self.open_winform('fishtts'))
         self.actiontts_f5tts.triggered.connect(lambda: self.open_winform('f5tts'))
         self.actiontts_refaudio.triggered.connect(lambda: self.open_winform('refaudio'))

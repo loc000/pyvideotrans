@@ -497,6 +497,122 @@ class Worker(QThread):
             capture.stop()
 
 
+class NemotronStreamWorker(QThread):
+    """Cache-aware Nemotron 3.5 streaming ASR for live captions."""
+
+    new_word = Signal(str)
+    new_segment = Signal(str)
+    ready = Signal()
+    error = Signal(str)
+    progress = Signal(str)
+
+    def __init__(
+        self,
+        capture_device: Union[CaptureDevice, dict, None] = None,
+        model_name: str = "",
+        detect_language: str = "auto",
+        is_cuda: bool = False,
+        record_dir=None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.record_dir = record_dir or f"{HOME_DIR}/realtime_stt"
+        self.running = False
+        self.model_name = model_name or ""
+        self.detect_language = detect_language or "auto"
+        self.is_cuda = is_cuda
+        if capture_device is not None:
+            if isinstance(capture_device, dict):
+                self.capture_device = CaptureDevice.from_dict(capture_device)
+            else:
+                self.capture_device = capture_device
+        else:
+            self.capture_device = None
+        self._session = None
+
+    @staticmethod
+    def _ends_sentence(text: str) -> bool:
+        text = text.rstrip()
+        if not text:
+            return False
+        return text[-1] in ".!?。！？"
+
+    def run(self):
+        from videotrans import recognition
+        from videotrans.recognition.nemotron_asr_load import NemotronStreamSession
+
+        if self.capture_device is None:
+            self.error.emit("No capture device")
+            return
+
+        try:
+            recognition.check_nemotron_asr_installed()
+            prefetch_recogn_model(
+                recognition.NEMOTRON_ASR,
+                self.model_name,
+                callback=lambda msg: self.progress.emit(msg),
+                detect_language=self.detect_language,
+            )
+        except Exception as e:
+            self.error.emit(str(e))
+            return
+
+        sample_rate = self.capture_device.sample_rate
+        samples_per_read = max(int(0.1 * sample_rate), 256)
+        try:
+            capture = open_capture_stream(self.capture_device)
+        except Exception as e:
+            self.error.emit(str(e))
+            return
+
+        wav_path = self.record_dir
+        Path(wav_path).mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H-%M-%S")
+        txt_file = open(f"{wav_path}/{timestamp}.txt", "a", encoding="utf-8")
+        wav_file = wave.open(f"{wav_path}/{timestamp}.wav", "wb")
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+
+        last_partial = ""
+        last_committed = ""
+        try:
+            self._session = NemotronStreamSession(
+                self.model_name,
+                is_cuda=self.is_cuda,
+                detect_language=self.detect_language,
+            )
+            capture.start()
+            self.ready.emit()
+            self.running = True
+            while self.running:
+                samples = capture.read(samples_per_read)
+                if samples.size < 1:
+                    continue
+                samples_int16 = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
+                wav_file.writeframes(samples_int16.tobytes())
+                audio_16k = _resample_to_16k_mono(samples, sample_rate)
+                text = self._session.feed_audio_16k(audio_16k).strip()
+                if text and text != last_partial:
+                    self.new_word.emit(text)
+                    last_partial = text
+                if text and self._ends_sentence(text) and text != last_committed:
+                    txt_file.write(text + "\n")
+                    txt_file.flush()
+                    self.new_segment.emit(text)
+                    last_committed = text
+        except Exception as e:
+            logger.exception(f"[Nemotron live] {e}", exc_info=True)
+            self.error.emit(str(e))
+        finally:
+            if self._session is not None:
+                self._session.release()
+                self._session = None
+            wav_file.close()
+            txt_file.close()
+            capture.stop()
+
+
 def _write_mono_wav(path: str, samples: np.ndarray, sample_rate: int):
     samples_int16 = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
     with wave.open(path, "wb") as wf:
