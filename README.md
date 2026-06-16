@@ -25,6 +25,41 @@
 
 ---
 
+## 🔀 This Fork vs Upstream
+
+This repository is a fork of [jianchang512/pyvideotrans](https://github.com/jianchang512/pyvideotrans). It keeps the upstream workflow (ASR → translation → TTS → mux) but adds recognition and realtime features that are not in the original repo yet.
+
+| Area | Upstream | This fork (`loc000/pyvideotrans`) |
+| :--- | :--- | :--- |
+| **Live captions** | Basic realtime STT UI | Full **live captions** window with bilingual overlay, configurable font/opacity, and shared realtime engine |
+| **Realtime ASR** | Per-channel ad-hoc logic | Unified **`realtime_engine`** + **`model_assets`** registry for batch and streaming ASR |
+| **ASR channels** | Standard upstream set | Adds **OpenRouter** (dedicated `openrouter_asr_*` settings), **MiMo-V2.5-ASR (Local)**, and **Nemotron-3.5-ASR Streaming (Local)** |
+| **OpenRouter STT** | Via generic OpenAI Speech-to-Text settings | Separate **OpenRouter ASR** channel calling `POST /audio/transcriptions` with `input_audio` (independent from translation `openrouter_key`) |
+| **API troubleshooting** | Basic error messages | **HTTP debug blocks** (request URL, model, redacted curl) on failed OpenAI-compatible translation/STT calls |
+| **Tests** | Upstream coverage | Extra unit tests for OpenRouter ASR, MiMo ASR, and Nemotron ASR language/model helpers |
+
+**Clone this fork:**
+
+```bash
+git clone git@github.com:loc000/pyvideotrans.git
+cd pyvideotrans
+uv sync
+```
+
+**Sync with upstream** (optional):
+
+```bash
+git remote add upstream https://github.com/jianchang512/pyvideotrans.git
+git fetch upstream
+git merge upstream/main
+```
+
+> **API keys:** `videotrans/params.json` and `videotrans/cfg.json` are gitignored. Configure keys in the GUI (Menu → Keys) after cloning; they are never committed to this repo.
+
+See [docs/architecture.md](docs/architecture.md) for implementation details on live captions, MiMo ASR, and the realtime pipeline.
+
+---
+
 ## ✨ Core Features
 
 > [Technical Architecture and Principles](docs/architecture.md)
@@ -34,7 +69,7 @@
 - **🗣️ Multi-Role AI Dubbing**: Assign different AI dubbing voices to different speakers.
 - **🧬 Voice Cloning**: Integrates models like **F5-TTS, CosyVoice, GPT-SoVITS** for zero-shot voice cloning.
 - **🧠 Powerful Model Support**: 
-  - **ASR**: Faster-Whisper (Local), OpenAI Whisper, Alibaba Qwen, ByteDance Volcano, Azure, Google, etc.
+  - **ASR**: Faster-Whisper (Local), OpenAI Whisper, Alibaba Qwen, ByteDance Volcano, Azure, Google, **OpenRouter**, **MiMo-V2.5-ASR**, **Nemotron streaming ASR**, etc.
   - **LLM Translation**: DeepSeek, ChatGPT, Claude, Gemini, MiniMax, Ollama (Local), Alibaba Bailian, etc.
   - **TTS**: Edge-TTS (Free), OpenAI, Azure, Minimaxi, ChatTTS, ChatterBox, etc.
 - **🖥️ Interactive Editing**: Supports pausing and manual proofreading at each stage (recognition, translation, dubbing) to ensure accuracy.
@@ -85,7 +120,10 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 ```bash
 # 1. Clone the repository (Ensure path has no spaces/Chinese characters)
-git clone https://github.com/jianchang512/pyvideotrans.git
+#    Fork (this repo):
+git clone git@github.com:loc000/pyvideotrans.git
+#    Upstream original:
+# git clone https://github.com/jianchang512/pyvideotrans.git
 cd pyvideotrans
 
 # 2. Install dependencies (uv automatically syncs environment)
@@ -136,6 +174,10 @@ uv add nvidia-cublas-cu12 nvidia-cudnn-cu12
 | **ASR (Speech Recognition)** | **Faster-Whisper** (Local) | Recommended, fast speed, high accuracy |
 | | WhisperX / Parakeet | Supports timestamp alignment & speaker diarization |
 | | Alibaba Qwen3-ASR / ByteDance Volcano | Online API, excellent for Chinese |
+| | **OpenRouter** (fork) | Dedicated ASR channel; `openrouter_asr_*` settings, `/audio/transcriptions` |
+| | **MiMo-V2.5-ASR** (fork, local) | Xiaomi MiMo local ASR with bundled tokenizer |
+| | **Nemotron-3.5-ASR Streaming** (fork, local) | NVIDIA Nemotron streaming ASR for live/batch use |
+| | **Live captions** (fork) | Real-time subtitles with optional translation overlay |
 | **Translation (LLM/MT)** | **DeepSeek** / ChatGPT | Supports context understanding, more natural translation |
 | | MiniMax AI | MiniMax M2.7 LLM, latest flagship model, OpenAI-compatible |
 | | Google / Microsoft | Traditional machine translation, fast speed |
@@ -170,4 +212,4 @@ This project mainly relies on the following open-source projects (partial):
 
 ---
 
-*Created by [jianchang512](https://github.com/jianchang512)*
+*Fork maintained by [loc000](https://github.com/loc000) · Based on [jianchang512/pyvideotrans](https://github.com/jianchang512/pyvideotrans)*
